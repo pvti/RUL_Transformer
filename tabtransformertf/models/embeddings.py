@@ -9,11 +9,11 @@ class PLE(tf.keras.layers.Layer):
         super(PLE, self).__init__()
         self.n_bins = n_bins
 
-    def adapt(self, data, y=None, task='classification', tree_params = {}):
+    def adapt(self, data, y=None, task="classification", tree_params={}):
         if y is not None:
-            if task == 'classification':
+            if task == "classification":
                 dt = DecisionTreeClassifier(max_leaf_nodes=self.n_bins, **tree_params)
-            elif task == 'regression':
+            elif task == "regression":
                 dt = DecisionTreeRegressor(max_leaf_nodes=self.n_bins, **tree_params)
             else:
                 raise ValueError("This task is not supported")
@@ -65,32 +65,36 @@ class PLE(tf.keras.layers.Layer):
 
         return enc
 
+
 class Periodic(tf.keras.layers.Layer):
-  def __init__(self, emb_dim, n_bins=50, sigma=5):
-      super(Periodic, self).__init__()
-      self.n_bins = n_bins
-      self.emb_dim = emb_dim
-      self.sigma = sigma
-  
-  def build(self, input_shape):  # Create the state of the layer (weights)
-    w_init = tf.random_normal_initializer(stddev=self.sigma)
-    self.p = tf.Variable(
-        initial_value=w_init(shape=(input_shape[-1], self.n_bins),
-                             dtype='float32'),
-        trainable=True)
+    def __init__(self, emb_dim, n_bins=50, sigma=5):
+        super(Periodic, self).__init__()
+        self.n_bins = n_bins
+        self.emb_dim = emb_dim
+        self.sigma = sigma
 
-    self.l = tf.Variable(
-        initial_value=w_init(
-            shape=(input_shape[-1], self.n_bins*2, self.emb_dim), dtype='float32' # features, n_bins, emb_dim
-            ), trainable=True)
+    def build(self, input_shape):  # Create the state of the layer (weights)
+        w_init = tf.random_normal_initializer(stddev=self.sigma)
+        self.p = tf.Variable(
+            initial_value=w_init(shape=(input_shape[-1], self.n_bins), dtype="float32"),
+            trainable=True,
+        )
 
-  def call(self, inputs):  # Defines the computation from inputs to outputs
-    v = 2 * m.pi * self.p[None] * inputs[..., None]
-    emb = tf.concat([tf.math.sin(v), tf.math.cos(v)], axis=-1)
-    emb = tf.einsum('fne, bfn -> bfe', self.l, emb)
-    emb = tf.nn.relu(emb)
+        self.l = tf.Variable(
+            initial_value=w_init(
+                shape=(input_shape[-1], self.n_bins * 2, self.emb_dim),
+                dtype="float32",  # features, n_bins, emb_dim
+            ),
+            trainable=True,
+        )
 
-    return emb
+    def call(self, inputs):  # Defines the computation from inputs to outputs
+        v = 2 * m.pi * self.p[None] * inputs[..., None]
+        emb = tf.concat([tf.math.sin(v), tf.math.cos(v)], axis=-1)
+        emb = tf.einsum("fne, bfn -> bfe", self.l, emb)
+        emb = tf.nn.relu(emb)
+
+        return emb
 
 
 class NEmbedding(tf.keras.Model):
@@ -101,23 +105,23 @@ class NEmbedding(tf.keras.Model):
         y: np.array = None,
         task: str = None,
         emb_dim: int = 32,
-        emb_type: str = 'linear',
+        emb_type: str = "linear",
         n_bins: int = 10,
         sigma: float = 1,
-        tree_params = {},
+        tree_params={},
     ):
         super(NEmbedding, self).__init__()
 
-        if emb_type not in ['linear', 'ple', 'periodic']:
+        if emb_type not in ["linear", "ple", "periodic"]:
             raise ValueError("This emb_type is not supported")
-        
+
         self.num_features = len(feature_names)
         self.features = feature_names
         self.emb_type = emb_type
         self.emb_dim = emb_dim
-        
+
         # Initialise embedding layers
-        if emb_type == 'ple':
+        if emb_type == "ple":
             self.embedding_layers = {}
             self.linear_layers = {}
             for i, f in enumerate(feature_names):
@@ -125,50 +129,55 @@ class NEmbedding(tf.keras.Model):
                 if y is None:
                     emb_l.adapt(X[:, i], tree_params=tree_params)
                 else:
-                    emb_l.adapt(X[:, i].reshape(-1, 1), y, task=task, tree_params=tree_params)
+                    emb_l.adapt(
+                        X[:, i].reshape(-1, 1), y, task=task, tree_params=tree_params
+                    )
 
-                lin_l = tf.keras.layers.Dense(emb_dim, activation='relu')
-                
+                lin_l = tf.keras.layers.Dense(emb_dim, activation="relu")
+
                 self.embedding_layers[f] = emb_l
                 self.linear_layers[f] = lin_l
 
-        elif emb_type == 'periodic':
+        elif emb_type == "periodic":
             # There's just 1 periodic layer
-            self.embedding_layer = Periodic(
-                n_bins = n_bins,
-                emb_dim = emb_dim,
-                sigma = sigma)
+            self.embedding_layer = Periodic(n_bins=n_bins, emb_dim=emb_dim, sigma=sigma)
         else:
             # Initialise linear layer
             w_init = tf.random_normal_initializer()
             self.linear_w = tf.Variable(
                 initial_value=w_init(
-                    shape=(self.num_features, 1, self.emb_dim), dtype='float32' # features, n_bins, emb_dim
-                ), trainable=True)
+                    shape=(self.num_features, 1, self.emb_dim),
+                    dtype="float32",  # features, n_bins, emb_dim
+                ),
+                trainable=True,
+            )
             self.linear_b = tf.Variable(
                 w_init(
-                    shape=(self.num_features, 1), dtype='float32' # features, n_bins, emb_dim
-                ), trainable=True)
-    
-    
+                    shape=(self.num_features, 1),
+                    dtype="float32",  # features, n_bins, emb_dim
+                ),
+                trainable=True,
+            )
+
     def embed_column(self, f, data):
         emb = self.linear_layers[f](self.embedding_layers[f](data))
         return emb
-   
+
     def call(self, x):
-        if self.emb_type == 'ple':
+        if self.emb_type == "ple":
             emb_columns = []
             for i, f in enumerate(self.features):
                 emb_columns.append(self.embed_column(f, x[:, i]))
             embs = tf.concat(emb_columns, axis=1)
-            
-        elif self.emb_type == 'periodic':
+
+        elif self.emb_type == "periodic":
             embs = self.embedding_layer(x)
         else:
-            embs = tf.einsum('f n e, b f -> bfe', self.linear_w, x)
+            embs = tf.einsum("f n e, b f -> bfe", self.linear_w, x)
             embs = tf.nn.relu(embs + self.linear_b)
-            
+
         return embs
+
 
 class CEmbedding(tf.keras.Model):
     def __init__(
@@ -180,16 +189,18 @@ class CEmbedding(tf.keras.Model):
         super(CEmbedding, self).__init__()
         self.features = feature_names
         self.emb_dim = emb_dim
-        
+
         self.category_prep_layers = {}
         self.emb_layers = {}
         for i, c in enumerate(self.features):
             lookup = tf.keras.layers.StringLookup(vocabulary=list(np.unique(X[:, i])))
-            emb = tf.keras.layers.Embedding(input_dim=lookup.vocabulary_size(), output_dim=self.emb_dim)
+            emb = tf.keras.layers.Embedding(
+                input_dim=lookup.vocabulary_size(), output_dim=self.emb_dim
+            )
 
             self.category_prep_layers[c] = lookup
             self.emb_layers[c] = emb
-    
+
     def embed_column(self, f, data):
         return self.emb_layers[f](self.category_prep_layers[f](data))
 
@@ -197,6 +208,6 @@ class CEmbedding(tf.keras.Model):
         emb_columns = []
         for i, f in enumerate(self.features):
             emb_columns.append(self.embed_column(f, x[:, i]))
-        
+
         embs = tf.stack(emb_columns, axis=1)
         return embs
