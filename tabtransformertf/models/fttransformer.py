@@ -207,7 +207,6 @@ class Time2Vec(tf.keras.Model):
             time_input = tf.stack(time_input, axis=1)[:, :, 0]
 
         time_input = tf.reshape(time_input, [-1, 16, 1])
-        print(f"*****************time input shape: {time_input.shape}")
         bias = self.wb*time_input + self.bb
         if self.p_activation.startswith('sin'):
             wgts = K.sin(K.dot(time_input, self.wa) + self.ba)
