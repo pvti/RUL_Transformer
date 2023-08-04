@@ -10,6 +10,7 @@ from tensorflow.keras import layers
 import math as m
 from tabtransformertf.models.embeddings import CEmbedding, NEmbedding
 
+
 class FTTransformerEncoder(tf.keras.Model):
     def __init__(
         self,
@@ -24,7 +25,7 @@ class FTTransformerEncoder(tf.keras.Model):
         heads: int = 8,
         attn_dropout: float = 0.1,
         ff_dropout: float = 0.1,
-        numerical_embedding_type: str = 'linear',
+        numerical_embedding_type: str = "linear",
         numerical_bins: int = None,
         ple_tree_params: dict = {},
         explainable=False,
@@ -56,24 +57,24 @@ class FTTransformerEncoder(tf.keras.Model):
         self.explainable = explainable
         self.depth = depth
         self.heads = heads
-            
+
         # Two main embedding modules
         if len(self.numerical) > 0:
             self.numerical_embeddings = NEmbedding(
-                feature_names=self.numerical, 
-                X=numerical_data, 
+                feature_names=self.numerical,
+                X=numerical_data,
                 y=y,
                 task=task,
-                emb_dim=embedding_dim, 
-                emb_type=numerical_embedding_type, 
+                emb_dim=embedding_dim,
+                emb_type=numerical_embedding_type,
                 n_bins=numerical_bins,
-                tree_params=ple_tree_params
+                tree_params=ple_tree_params,
             )
         if len(self.categorical) > 0:
             self.categorical_embeddings = CEmbedding(
                 feature_names=self.categorical,
                 X=categorical_data,
-                emb_dim =embedding_dim
+                emb_dim=embedding_dim,
             )
 
         # Transformers
@@ -101,20 +102,22 @@ class FTTransformerEncoder(tf.keras.Model):
 
     def call(self, inputs):
         # Start with CLS token
-        cls_tokens = tf.repeat(self.cls_weights, repeats=tf.shape(inputs[self.numerical[0]])[0], axis=0)
+        cls_tokens = tf.repeat(
+            self.cls_weights, repeats=tf.shape(inputs[self.numerical[0]])[0], axis=0
+        )
         cls_tokens = tf.expand_dims(cls_tokens, axis=1)
         transformer_inputs = [cls_tokens]
-    
+
         # If categorical features, add to list
         if len(self.categorical) > 0:
             cat_input = []
             for c in self.categorical:
                 cat_input.append(inputs[c])
-            
+
             cat_input = tf.stack(cat_input, axis=1)[:, :, 0]
             cat_embs = self.categorical_embeddings(cat_input)
             transformer_inputs += [cat_embs]
-        
+
         # If numerical features, add to list
         if len(self.numerical) > 0:
             num_input = []
@@ -123,11 +126,11 @@ class FTTransformerEncoder(tf.keras.Model):
             num_input = tf.stack(num_input, axis=1)[:, :, 0]
             num_embs = self.numerical_embeddings(num_input)
             transformer_inputs += [num_embs]
-        
+
         # Prepare for Transformer
         transformer_inputs = tf.concat(transformer_inputs, axis=1)
         importances = []
-        
+
         # Pass through Transformer blocks
         for transformer in self.transformers:
             if self.explainable:
@@ -145,15 +148,17 @@ class FTTransformerEncoder(tf.keras.Model):
         else:
             return transformer_inputs
 
+
 class Time2Vec(tf.keras.Model):
-    def __init__(self,
-                 time_features: list,
-                 kernel_size: int, 
-                 t2v_emb_dim: int,
-                 periodic_activation='sin'):
+    def __init__(
+        self,
+        time_features: list,
+        kernel_size: int,
+        t2v_emb_dim: int,
+        periodic_activation="sin",
+    ):
         super(Time2Vec, self).__init__(
-            trainable=True,
-            name='Time2VecLayer_'+periodic_activation.upper()
+            trainable=True, name="Time2VecLayer_" + periodic_activation.upper()
         )
 
         self.k = kernel_size
@@ -161,44 +166,31 @@ class Time2Vec(tf.keras.Model):
         self.p_activation = periodic_activation
 
     def build(self, input_shape):
-
         self.wb = self.add_weight(
-            name='wb',
-            shape=(1, 1),
-            initializer='uniform',
-            trainable=True
+            name="wb", shape=(1, 1), initializer="uniform", trainable=True
         )
 
         self.bb = self.add_weight(
-            name='bb',
-            shape=(1, 1),
-            initializer='uniform',
-            trainable=True
+            name="bb", shape=(1, 1), initializer="uniform", trainable=True
         )
 
         self.wa = self.add_weight(
-            name='wa',
-            shape=(1, self.k),
-            initializer='uniform',
-            trainable=True
+            name="wa", shape=(1, self.k), initializer="uniform", trainable=True
         )
 
         self.ba = self.add_weight(
-            name='ba',
-            shape=(1, self.k),
-            initializer='uniform',
-            trainable=True
+            name="ba", shape=(1, self.k), initializer="uniform", trainable=True
         )
 
         super(Time2Vec, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
-        '''
+        """
         : param inputs:  A Tensor with shape (batch_size, feature_size, 1)
         : param kwargs:
         : return: A Tensor with shape (batch_size, feature_size, length of time vector representation + 1)
 
-        '''
+        """
         # If time features, add to list
         if len(self.features) > 0:
             time_input = []
@@ -207,19 +199,21 @@ class Time2Vec(tf.keras.Model):
             time_input = tf.stack(time_input, axis=1)[:, :, 0]
 
         time_input = tf.reshape(time_input, [-1, 16, 1])
-        print(f"*****************time input shape: {time_input.shape}")
-        bias = self.wb*time_input + self.bb
-        if self.p_activation.startswith('sin'):
+        bias = self.wb * time_input + self.bb
+        if self.p_activation.startswith("sin"):
             wgts = K.sin(K.dot(time_input, self.wa) + self.ba)
-        elif self.p_activation.startswith('cos'):
+        elif self.p_activation.startswith("cos"):
             wgts = K.cos(K.dot(time_input, self.wa) + self.ba)
         else:
-            raise NotImplementedError('Neither sine or cosine periodic activation be selected.')
-        
+            raise NotImplementedError(
+                "Neither sine or cosine periodic activation be selected."
+            )
+
         return K.concatenate([bias, wgts], -1)
-    
+
     def compute_output_shape(self, input_shape):
         return (input_shape[0], input_shape[1], self.k + 1)
+
 
 class FTTransformer(tf.keras.Model):
     def __init__(
@@ -238,7 +232,7 @@ class FTTransformer(tf.keras.Model):
         numerical_embeddings: dict = None,
         explainable=False,
         encoder=None,
-        t2v_encoder=None
+        t2v_encoder=None,
     ):
         super(FTTransformer, self).__init__()
 
@@ -247,26 +241,26 @@ class FTTransformer(tf.keras.Model):
             self.encoder = encoder
         else:
             self.encoder = FTTransformerEncoder(
-                categorical_features = categorical_features,
-                numerical_features = numerical_features,
-                categorical_lookup = categorical_lookup,
-                embedding_dim = embedding_dim,
-                depth = depth,
-                heads = heads,
-                attn_dropout = attn_dropout,
-                ff_dropout = ff_dropout,
-                numerical_embedding_type = numerical_embedding_type,
-                numerical_embeddings = numerical_embeddings,
-                explainable = explainable,
+                categorical_features=categorical_features,
+                numerical_features=numerical_features,
+                categorical_lookup=categorical_lookup,
+                embedding_dim=embedding_dim,
+                depth=depth,
+                heads=heads,
+                attn_dropout=attn_dropout,
+                ff_dropout=ff_dropout,
+                numerical_embedding_type=numerical_embedding_type,
+                numerical_embeddings=numerical_embeddings,
+                explainable=explainable,
             )
 
         # mlp layers
         self.ln = tf.keras.layers.LayerNormalization()
-        self.final_ff = Dense(embedding_dim//2, activation='relu')
+        self.final_ff = Dense(embedding_dim // 2, activation="relu")
         self.output_layer = Dense(out_dim, activation=out_activation)
 
         # time2vec layer
-        #self.time2vec_input = layers.Input(shape=(t2v_input_dim, 1))
+        # self.time2vec_input = layers.Input(shape=(t2v_input_dim, 1))
         if t2v_encoder:
             self.t2v_encoder = t2v_encoder
         self.fl = layers.Flatten()

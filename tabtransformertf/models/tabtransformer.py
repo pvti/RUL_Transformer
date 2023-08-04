@@ -66,8 +66,8 @@ class TransformerBlock(Layer):
             else:
                 # Without attention
                 attention_output = self.att(inputs, inputs)
-            attention_output = self.skip1([inputs, attention_output])   
-            feedforward_output = self.ffn(attention_output) 
+            attention_output = self.skip1([inputs, attention_output])
+            feedforward_output = self.ffn(attention_output)
             transformer_output = self.skip2([feedforward_output, attention_output])
             transformer_output = self.layernorm2(transformer_output)
         # Pre-norm variant
@@ -86,7 +86,7 @@ class TransformerBlock(Layer):
             norm_attention_output = self.layernorm2(attention_output)
             feedforward_output = self.ffn(norm_attention_output)
             transformer_output = self.skip2([feedforward_output, attention_output])
-        
+
         # Outputs
         if self.explainable:
             return transformer_output, att_weights
@@ -255,7 +255,6 @@ class TabTransformerRTD(tf.keras.Model):
         use_column_embedding: bool = True,
         rtd_factor=2,
     ):
-
         super(TabTransformerRTD, self).__init__()
 
         # Initialise encoder
@@ -319,7 +318,6 @@ class TabTransformer(tf.keras.Model):
         mlp_hidden_factors: list = [2, 4],
         encoder=None,
     ):
-
         super(TabTransformer, self).__init__()
 
         # Initialise encoder

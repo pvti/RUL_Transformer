@@ -18,13 +18,13 @@ def df_to_dataset(
         labels = df.pop(target)
         dataset = {}
         for key, value in df.items():
-            dataset[key] = value[:, tf.newaxis]
+            dataset[key] = value.to_numpy()[:, tf.newaxis]
 
         dataset = tf.data.Dataset.from_tensor_slices((dict(dataset), labels))
     else:
         dataset = {}
         for key, value in df.items():
-            dataset[key] = value[:, tf.newaxis]
+            dataset[key] = value.to_numpy()[:, tf.newaxis]
 
         dataset = tf.data.Dataset.from_tensor_slices(dict(dataset))
 
@@ -45,7 +45,11 @@ def build_categorical_prep(data: pd.DataFrame, categorical_features: list):
 
 
 def build_numerical_prep(
-    data: pd.DataFrame, numerical_features: list, y = None, n_bins: int = 10, type: str = "ple",
+    data: pd.DataFrame,
+    numerical_features: list,
+    y=None,
+    n_bins: int = 10,
+    type: str = "ple",
 ):
     if type not in ["ple"]:
         raise ValueError(f"Type {type} is not implemented yet")
@@ -54,7 +58,7 @@ def build_numerical_prep(
     # Numerical prep layers
     for f in numerical_features:
         num_emb_layer = PLE(n_bins)
-        num_emb_layer.adapt(data[f].astype(np.float32).values.reshape(-1, 1), y = y)
+        num_emb_layer.adapt(data[f].astype(np.float32).values.reshape(-1, 1), y=y)
         numerical_prep_layers[f] = num_emb_layer
 
     return numerical_prep_layers
@@ -90,11 +94,11 @@ class PLE(tf.keras.layers.Layer):
         super(PLE, self).__init__()
         self.n_bins = n_bins
 
-    def adapt(self, data, y=None, task='classification', tree_params = {}):
+    def adapt(self, data, y=None, task="classification", tree_params={}):
         if y is not None:
-            if task == 'classification':
+            if task == "classification":
                 dt = DecisionTreeClassifier(max_leaf_nodes=self.n_bins, **tree_params)
-            elif task == 'regression':
+            elif task == "regression":
                 dt = DecisionTreeRegressor(max_leaf_nodes=self.n_bins, **tree_params)
             else:
                 raise ValueError("This task is not supported")
@@ -152,29 +156,33 @@ class PLE(tf.keras.layers.Layer):
 
         return enc
 
+
 class Periodic(tf.keras.layers.Layer):
-  def __init__(self, emb_dim, n_bins=50, sigma=5):
-      super(Periodic, self).__init__()
-      self.n_bins = n_bins
-      self.emb_dim = emb_dim
-      self.sigma = sigma
-  
-  def build(self, input_shape):  # Create the state of the layer (weights)
-    w_init = tf.random_normal_initializer(stddev=self.sigma)
-    self.p = tf.Variable(
-        initial_value=w_init(shape=(input_shape[-1], self.n_bins),
-                             dtype='float32'),
-        trainable=True)
+    def __init__(self, emb_dim, n_bins=50, sigma=5):
+        super(Periodic, self).__init__()
+        self.n_bins = n_bins
+        self.emb_dim = emb_dim
+        self.sigma = sigma
 
-    self.l = tf.Variable(
-        initial_value=w_init(
-            shape=(input_shape[-1], self.n_bins*2, self.emb_dim), dtype='float32' # features, n_bins, emb_dim
-            ), trainable=True)
+    def build(self, input_shape):  # Create the state of the layer (weights)
+        w_init = tf.random_normal_initializer(stddev=self.sigma)
+        self.p = tf.Variable(
+            initial_value=w_init(shape=(input_shape[-1], self.n_bins), dtype="float32"),
+            trainable=True,
+        )
 
-  def call(self, inputs):  # Defines the computation from inputs to outputs
-    v = 2 * m.pi * self.p[None] * inputs[..., None]
-    emb = tf.concat([tf.math.sin(v), tf.math.cos(v)], axis=-1)
-    emb = tf.einsum('fne, bfn -> bfe', self.l, emb)
-    emb = tf.nn.relu(emb)
+        self.l = tf.Variable(
+            initial_value=w_init(
+                shape=(input_shape[-1], self.n_bins * 2, self.emb_dim),
+                dtype="float32",  # features, n_bins, emb_dim
+            ),
+            trainable=True,
+        )
 
-    return emb
+    def call(self, inputs):  # Defines the computation from inputs to outputs
+        v = 2 * m.pi * self.p[None] * inputs[..., None]
+        emb = tf.concat([tf.math.sin(v), tf.math.cos(v)], axis=-1)
+        emb = tf.einsum("fne, bfn -> bfe", self.l, emb)
+        emb = tf.nn.relu(emb)
+
+        return emb
