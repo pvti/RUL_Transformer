@@ -52,16 +52,7 @@ def apply_model(device, model, x_num, x_cat=None):
 
 
 @torch.no_grad()
-def evaluate(mode, model, optimizer, X, y, part, checkpoint_path, device):
-    
-    if mode == 'validation':
-      if checkpoint_path:
-          checkpoint = torch.load(checkpoint_path, map_location=device)
-
-          model.load_state_dict(checkpoint['model_state_dict'])
-          optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-          epoch = checkpoint['epoch']
-          loss = checkpoint['loss']
+def evaluate(model, X, y, part, device):
 
     model.eval()
     prediction = []
@@ -71,13 +62,21 @@ def evaluate(mode, model, optimizer, X, y, part, checkpoint_path, device):
     prediction = torch.cat(prediction).squeeze(1).cpu().numpy()
     target = y[part].cpu().numpy()
 
-    #print(target.shape, prediction.shape)
 
     mse = mean_squared_error(target, prediction)
-    #valid_loss = criterion(target, prediction)
     score = np.sqrt(mse)
 
     return score, mse
+
+def load_model_from_checkpoint(model, optimizer, checkpoint_path, device):
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch = checkpoint['epoch']
+    loss = checkpoint['loss']
+
+    return model, optimizer, epoch, loss
 
 class SaveBestModel:
 
