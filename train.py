@@ -49,7 +49,7 @@ def train(model, optimizer, criterion, n_epochs, batch_size, X, y, checkpoint_pa
         epoch_loss = train_running_loss / counter
         #epoch_mse = train_running_rmse / counter
 
-        val_score, val_mse_loss = evaluate('training', model, optimizer, X, y, 'val', checkpoint_path, device)
+        val_score, val_mse_loss = evaluate(model, optimizer, X, y, 'val', device)
         save_best_model(
             val_score, epoch, model, optimizer, criterion
         )
